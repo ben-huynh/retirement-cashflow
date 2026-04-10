@@ -57,6 +57,7 @@ html,body{height:100%;font-family:Georgia,serif;color:var(--txt);background:var(
 .scen-btn{padding:4px 10px;font-size:11px;border-radius:5px;border:1px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;font-family:inherit;transition:all .12s}
 .scen-btn:hover{background:var(--sur2)}
 .body{display:grid;grid-template-columns:50% 6px 1fr;flex:1;overflow:hidden}
+#view-results{box-sizing:border-box}
 #splitter{background:var(--bdr);cursor:col-resize;z-index:10;transition:background .15s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 #splitter:hover{background:#b0aead}
 #splitter::after{content:'';display:block;width:2px;height:36px;background:var(--bdr2);border-radius:2px}
@@ -157,7 +158,7 @@ tbody tr:last-child td{border-bottom:none}
       <div class="field"><label>Social Security — $/mo</label>
         <div class="field-row">
           <input type="number" id="f-p2-amt" value="" min="0" placeholder="$/mo">
-          <div class="field"><label style="font-size:10px;margin-bottom:2px">Start age</label><input type="number" id="f-p2-age" value="" min="0" placeholder="age"></div>
+          <div class="field"><label style="font-size:10px;margin-bottom:2px">Start age</label><input type="number" id="f-p2-age" value="65" min="0" placeholder="age"></div>
         </div>
       </div>
     </div>
@@ -180,15 +181,15 @@ tbody tr:last-child td{border-bottom:none}
       <h2>Roth conversions</h2>
       <div class="field"><label>Annual Roth conversion amount ($)</label><input type="number" id="f-roth-conv" value="" min="0" step="1000"><div class="hint">Converts from 401k → Roth each year at specified rate</div></div>
       <div class="field"><label>Convert for how many years from retirement</label><input type="number" id="f-roth-years" value="" min="0" max="20"></div>
-      <div class="field"><label>Conversion federal tax rate (%)</label><input type="number" id="f-fed-conv" value="" min="0" max="37" step="1"></div>
+      <div class="field"><label>Conversion federal tax rate (%)</label><input type="number" id="f-fed-conv" value="12" min="0" max="37" step="1"></div>
     </div>
 
     <!-- Tax assumptions -->
     <div class="card">
       <h2>Tax assumptions</h2>
       <div class="field"><label>State tax rate on 401k/pension withdrawals (%)</label><input type="number" id="f-state-tax" value="0" min="0" max="15" step="0.5"><div class="hint">Illinois = 0% (full exemption). CA = 13.3%, NY = 6.85% etc.</div></div>
-      <div class="field"><label>Federal rate on 401k draws — pre full pension (%)</label><input type="number" id="f-fed-mid" value="" min="0" max="37" step="1"></div>
-      <div class="field"><label>Federal rate on 401k draws — post full pension (%)</label><input type="number" id="f-fed-late" value="" min="0" max="37" step="1"><div class="hint">Higher because pension fills lower brackets</div></div>
+      <div class="field"><label>Federal rate on 401k draws — pre full pension (%)</label><input type="number" id="f-fed-mid" value="15" min="0" max="37" step="1"></div>
+      <div class="field"><label>Federal rate on 401k draws — post full pension (%)</label><input type="number" id="f-fed-late" value="22" min="0" max="37" step="1"><div class="hint">Higher because pension fills lower brackets</div></div>
     </div>
 
     <!-- Working years — full width -->
@@ -311,8 +312,17 @@ tbody tr:last-child td{border-bottom:none}
 let CFG = null;
 
 // ─── VIEWS ───────────────────────────────────────────────────────────────────
-function showInput()  { document.getElementById('view-input').style.display='';  document.getElementById('view-results').style.display='none'; }
-function showResults(){ document.getElementById('view-input').style.display='none'; document.getElementById('view-results').style.display=''; }
+function showInput()  {
+  document.getElementById('view-input').style.display='';
+  document.getElementById('view-results').style.display='none';
+}
+function showResults(){
+  document.getElementById('view-input').style.display='none';
+  const r=document.getElementById('view-results');
+  r.style.display='flex';
+  r.style.flexDirection='column';
+  r.style.height='100vh';
+}
 
 // ─── ADD / REMOVE WORKING YEAR ROWS ─────────────────────────────────────────
 function addWorkYear(){
@@ -433,11 +443,14 @@ function buildAges(cfg){
 }
 
 function getContrib(cfg,age){
+  // Only return contributions for working years strictly before retirement
+  if(age+0.01>=cfg.retireAge) return null;
   const yearIdx=Math.round(age-cfg.currentAge);
-  if(yearIdx<0||age>=cfg.retireAge) return null;
+  if(yearIdx<0) return null;
   const wy=cfg.workYears;
   if(!wy||wy.length===0) return {k401:0,brok:0,roth:0,hsa:0,note:''};
-  return wy[Math.min(yearIdx,wy.length-1)];
+  if(yearIdx>=wy.length) return null; // past the years specified — no more contributions
+  return wy[yearIdx];
 }
 
 function getSpend(cfg,age){
@@ -934,9 +947,14 @@ function generate(){
     ` · RMDs @ 75`;
 
   showResults();
-  initSplitter();
-  setAcct('all');
-  setR('mid');
+  // Small timeout to ensure DOM is visible before rendering
+  setTimeout(()=>{
+    initSplitter();
+    setAcct('all');
+    setR('mid');
+    // Auto-select first row so Sankey is visible immediately
+    selectRow(0);
+  }, 50);
 }
 
 window.addEventListener('resize',()=>{if(selIdx!==null&&SC.mid)drawSankey(selIdx);});
